@@ -17,4 +17,8 @@ constexpr uint16_t kEcuAddress = 0x1001;
 constexpr uint16_t kVinDid = 0xF190;
 constexpr uint16_t kSupportedRoutineId = 0xFF00;
 
+// Demo SecurityAccess data
+constexpr uint16_t kSecuritySeed = 0x1234;
+constexpr uint16_t kSecurityExpectedKey = 0xB89E;
+
 }  // namespace config

@@ -31,6 +31,27 @@ uds::Message DcmService::handleRequest(const uds::Message& request) const {
             }
             return negativeResponse(sid, 0x31);
         }
+        case uds::kSidSecurityAccess: {
+            if (request.size() < 2) return negativeResponse(sid, 0x13);
+
+            const uint8_t subFunction = request[1];
+            if (subFunction == 0x01) {
+                const uint8_t seedHi = static_cast<uint8_t>((config::kSecuritySeed >> 8) & 0xFF);
+                const uint8_t seedLo = static_cast<uint8_t>(config::kSecuritySeed & 0xFF);
+                return {static_cast<uint8_t>(sid + 0x40), subFunction, seedHi, seedLo};
+            }
+
+            if (subFunction == 0x02) {
+                if (request.size() < 4) return negativeResponse(sid, 0x13);
+                const uint16_t key = static_cast<uint16_t>(request[2] << 8 | request[3]);
+                if (key != config::kSecurityExpectedKey) {
+                    return negativeResponse(sid, 0x35);  // invalid key
+                }
+                return {static_cast<uint8_t>(sid + 0x40), subFunction};
+            }
+
+            return negativeResponse(sid, 0x12);
+        }
         case uds::kSidRoutineControl: {
             if (request.size() < 4) return negativeResponse(sid, 0x13);
 
