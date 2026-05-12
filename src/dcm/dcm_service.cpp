@@ -29,6 +29,25 @@ uds::Message DcmService::handleRequest(const uds::Message& request) const {
             }
             return negativeResponse(sid, 0x31);
         }
+        case uds::kSidRoutineControl: {
+            if (request.size() < 4) return negativeResponse(sid, 0x13);
+
+            const uint8_t subFunction = request[1];
+            const uint16_t routineId = static_cast<uint16_t>(request[2] << 8 | request[3]);
+            if (routineId != 0xFF00) {
+                return negativeResponse(sid, 0x31);
+            }
+
+            if (subFunction != 0x01 && subFunction != 0x02 && subFunction != 0x03) {
+                return negativeResponse(sid, 0x12);
+            }
+
+            uds::Message response{static_cast<uint8_t>(sid + 0x40), subFunction, request[2], request[3]};
+            if (subFunction == 0x03) {
+                response.push_back(0x00);  // routine status: finished successfully
+            }
+            return response;
+        }
         default:
             return negativeResponse(sid, 0x11);
     }
