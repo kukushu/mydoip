@@ -1,12 +1,14 @@
 #pragma once
 
+#include "../config/demo_config.hpp"
+
 #include <cstdint>
 
 namespace doip {
 
-constexpr uint16_t kPort = 13400;
-constexpr uint16_t kPayloadTypeDiagnosticMessage = 0x8001;
-constexpr uint8_t kProtocolVersion = 0x02;
+constexpr uint16_t kPort = config::kDoipPort;
+constexpr uint16_t kPayloadTypeDiagnosticMessage = config::kDoipPayloadTypeDiagnosticMessage;
+constexpr uint8_t kProtocolVersion = config::kDoipProtocolVersion;
 
 struct Header {
     uint8_t protocolVersion{kProtocolVersion};

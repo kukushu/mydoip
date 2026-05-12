@@ -1,5 +1,7 @@
 #include "dcm_service.hpp"
 
+#include "../config/demo_config.hpp"
+
 #include <string>
 
 namespace dcm {
@@ -21,7 +23,7 @@ uds::Message DcmService::handleRequest(const uds::Message& request) const {
         case uds::kSidReadDataByIdentifier: {
             if (request.size() < 3) return negativeResponse(sid, 0x13);
             const uint16_t did = static_cast<uint16_t>(request[1] << 8 | request[2]);
-            if (did == 0xF190) {
+            if (did == config::kVinDid) {
                 const std::string vin = "WVWZZZ1JZXW000001";
                 uds::Message response{static_cast<uint8_t>(sid + 0x40), request[1], request[2]};
                 response.insert(response.end(), vin.begin(), vin.end());
@@ -34,7 +36,7 @@ uds::Message DcmService::handleRequest(const uds::Message& request) const {
 
             const uint8_t subFunction = request[1];
             const uint16_t routineId = static_cast<uint16_t>(request[2] << 8 | request[3]);
-            if (routineId != 0xFF00) {
+            if (routineId != config::kSupportedRoutineId) {
                 return negativeResponse(sid, 0x31);
             }
 

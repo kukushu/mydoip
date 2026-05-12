@@ -1,3 +1,4 @@
+#include "../config/demo_config.hpp"
 #include "../dcm/dcm_service.hpp"
 #include "../doip/doip_codec.hpp"
 #include "../doip/socket_io.hpp"

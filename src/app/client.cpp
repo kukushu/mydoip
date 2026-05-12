@@ -1,3 +1,4 @@
+#include "../config/demo_config.hpp"
 #include "../doip/doip_codec.hpp"
 #include "../doip/socket_io.hpp"
 #include "../uds/uds_types.hpp"
@@ -50,9 +51,6 @@ int main() {
         return 1;
     }
 
-    constexpr uint16_t kTesterAddress = 0x0E00;
-    constexpr uint16_t kEcuAddress = 0x1001;
-
     std::cout << "Connected to DoIP server on 127.0.0.1:" << doip::kPort << "\n";
     std::cout << "Input UDS hex bytes (example: 22 F1 90), type q to quit.\n";
 
@@ -69,7 +67,7 @@ int main() {
         }
 
         std::vector<uint8_t> requestFrame =
-            doip::encodeDiagnosticFrame(kTesterAddress, kEcuAddress, udsRequest);
+            doip::encodeDiagnosticFrame(config::kTesterAddress, config::kEcuAddress, udsRequest);
 
         std::cout << "Tx UDS request: " << uds::bytesToHex(udsRequest) << "\n";
         if (!doip::sendAll(clientFd, requestFrame.data(), requestFrame.size())) {
