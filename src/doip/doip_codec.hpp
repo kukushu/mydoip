@@ -52,7 +52,7 @@ inline bool decodeDiagnosticFrame(const std::vector<uint8_t>& frame, DiagnosticM
 
     const uint16_t payloadType = ntohs(payloadTypeN);
     const uint32_t payloadLength = ntohl(payloadLengthN);
-    if (payloadType != kPayloadTypeDiagnosticMessage) return false;
+    if (payloadType != config::kDoipPayloadTypeDiagnosticMessage) return false;
     if (payloadLength + 8 != frame.size()) return false;
 
     uint16_t srcN = 0;

@@ -43,7 +43,7 @@ int main() {
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(doip::kPort);
+    addr.sin_port = htons(config::kDoipPort);
     inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
 
     if (connect(clientFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
@@ -51,7 +51,7 @@ int main() {
         return 1;
     }
 
-    std::cout << "Connected to DoIP server on 127.0.0.1:" << doip::kPort << "\n";
+    std::cout << "Connected to DoIP server on 127.0.0.1:" << config::kDoipPort << "\n";
     std::cout << "Input UDS hex bytes (example: 22 F1 90), type q to quit.\n";
 
     std::string line;

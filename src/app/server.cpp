@@ -66,7 +66,7 @@ int main() {
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(doip::kPort);
+    addr.sin_port = htons(config::kDoipPort);
     addr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(serverFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
@@ -78,7 +78,7 @@ int main() {
         return 1;
     }
 
-    std::cout << "DoIP server listening on 0.0.0.0:" << doip::kPort
+    std::cout << "DoIP server listening on 0.0.0.0:" << config::kDoipPort
               << " (Ctrl+C to stop)\n";
 
     dcm::DcmService dcm;
