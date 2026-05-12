@@ -8,6 +8,50 @@
 #include <iostream>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <vector>
+
+namespace {
+
+bool handleOneClient(int clientFd, const dcm::DcmService& dcm) {
+    uint8_t header[8];
+    if (!doip::recvAll(clientFd, header, 8)) {
+        return false;
+    }
+
+    uint32_t payloadLenN = 0;
+    std::memcpy(&payloadLenN, &header[4], 4);
+    const uint32_t payloadLen = ntohl(payloadLenN);
+
+    std::vector<uint8_t> frame(8 + payloadLen);
+    std::memcpy(frame.data(), header, 8);
+    if (!doip::recvAll(clientFd, frame.data() + 8, payloadLen)) {
+        return false;
+    }
+
+    doip::DiagnosticMessage meta;
+    uds::Message udsRequest;
+    if (!doip::decodeDiagnosticFrame(frame, meta, udsRequest)) {
+        std::cerr << "invalid doip frame\n";
+        return false;
+    }
+
+    std::cout << "Rx UDS from tester 0x" << std::hex << meta.sourceAddress
+              << " to ecu 0x" << meta.targetAddress << ": "
+              << uds::bytesToHex(udsRequest) << std::dec << "\n";
+
+    const uds::Message udsResponse = dcm.handleRequest(udsRequest);
+    std::vector<uint8_t> responseFrame =
+        doip::encodeDiagnosticFrame(meta.targetAddress, meta.sourceAddress, udsResponse);
+
+    if (!doip::sendAll(clientFd, responseFrame.data(), responseFrame.size())) {
+        return false;
+    }
+
+    std::cout << "Tx UDS response: " << uds::bytesToHex(udsResponse) << "\n";
+    return true;
+}
+
+}  // namespace
 
 int main() {
     int serverFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -28,62 +72,35 @@ int main() {
         std::cerr << "bind failed\n";
         return 1;
     }
-    if (listen(serverFd, 1) < 0) {
+    if (listen(serverFd, 8) < 0) {
         std::cerr << "listen failed\n";
         return 1;
     }
 
-    std::cout << "DoIP server listening on 0.0.0.0:" << doip::kPort << "\n";
-
-    sockaddr_in clientAddr{};
-    socklen_t clientLen = sizeof(clientAddr);
-    int clientFd = accept(serverFd, reinterpret_cast<sockaddr*>(&clientAddr), &clientLen);
-    if (clientFd < 0) {
-        std::cerr << "accept failed\n";
-        return 1;
-    }
-
-    uint8_t header[8];
-    if (!doip::recvAll(clientFd, header, 8)) {
-        std::cerr << "recv header failed\n";
-        return 1;
-    }
-
-    uint32_t payloadLenN = 0;
-    std::memcpy(&payloadLenN, &header[4], 4);
-    const uint32_t payloadLen = ntohl(payloadLenN);
-
-    std::vector<uint8_t> frame(8 + payloadLen);
-    std::memcpy(frame.data(), header, 8);
-    if (!doip::recvAll(clientFd, frame.data() + 8, payloadLen)) {
-        std::cerr << "recv payload failed\n";
-        return 1;
-    }
-
-    doip::DiagnosticMessage meta;
-    uds::Message udsRequest;
-    if (!doip::decodeDiagnosticFrame(frame, meta, udsRequest)) {
-        std::cerr << "invalid doip frame\n";
-        return 1;
-    }
-
-    std::cout << "Rx UDS from tester 0x" << std::hex << meta.sourceAddress
-              << " to ecu 0x" << meta.targetAddress << ": "
-              << uds::bytesToHex(udsRequest) << std::dec << "\n";
+    std::cout << "DoIP server listening on 0.0.0.0:" << doip::kPort
+              << " (Ctrl+C to stop)\n";
 
     dcm::DcmService dcm;
-    const uds::Message udsResponse = dcm.handleRequest(udsRequest);
-    std::vector<uint8_t> responseFrame = doip::encodeDiagnosticFrame(
-        meta.targetAddress, meta.sourceAddress, udsResponse);
+    while (true) {
+        sockaddr_in clientAddr{};
+        socklen_t clientLen = sizeof(clientAddr);
+        int clientFd = accept(serverFd, reinterpret_cast<sockaddr*>(&clientAddr), &clientLen);
+        if (clientFd < 0) {
+            std::cerr << "accept failed\n";
+            continue;
+        }
 
-    if (!doip::sendAll(clientFd, responseFrame.data(), responseFrame.size())) {
-        std::cerr << "send response failed\n";
-        return 1;
+        char ip[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &clientAddr.sin_addr, ip, sizeof(ip));
+        std::cout << "Client connected: " << ip << ":" << ntohs(clientAddr.sin_port) << "\n";
+
+        while (handleOneClient(clientFd, dcm)) {
+        }
+
+        std::cout << "Client disconnected\n";
+        close(clientFd);
     }
 
-    std::cout << "Tx UDS response: " << uds::bytesToHex(udsResponse) << "\n";
-
-    close(clientFd);
     close(serverFd);
     return 0;
 }
