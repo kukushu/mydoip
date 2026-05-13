@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <vector>
+#include <thread>
+#include <chrono>
 
 namespace {
 
@@ -43,34 +45,27 @@ bool sendUdsAndExpect(int fd, const std::vector<uint8_t>& udsReq, const std::vec
     payload.push_back(static_cast<uint8_t>(config::kEcuAddress & 0xFF));
     payload.insert(payload.end(), udsReq.begin(), udsReq.end());
 
-    if (!sendDoipFrame(fd, static_cast<uint16_t>(doip::PayloadType::DiagnosticMessage), payload)) {
-        std::cerr << "[FAIL] " << caseName << ": send failed\n";
-        return false;
-    }
+    if (!sendDoipFrame(fd, static_cast<uint16_t>(doip::PayloadType::DiagnosticMessage), payload)) return false;
 
     doip::Frame resp;
-    if (!recvDoipFrame(fd, resp)) {
-        std::cerr << "[FAIL] " << caseName << ": recv failed\n";
-        return false;
-    }
-    if (resp.header.payloadType != static_cast<uint16_t>(doip::PayloadType::DiagnosticMessage) || resp.payload.size() < 4) {
-        std::cerr << "[FAIL] " << caseName << ": invalid doip resp\n";
-        return false;
-    }
+    if (!recvDoipFrame(fd, resp)) return false;
+    if (resp.header.payloadType != static_cast<uint16_t>(doip::PayloadType::DiagnosticMessage) || resp.payload.size() < 4) return false;
 
     std::vector<uint8_t> udsResp(resp.payload.begin() + 4, resp.payload.end());
-    if (udsResp.size() < expectedPrefix.size()) {
-        std::cerr << "[FAIL] " << caseName << ": resp too short: " << uds::bytesToHex(udsResp) << "\n";
-        return false;
-    }
-    for (size_t i = 0; i < expectedPrefix.size(); ++i) {
-        if (udsResp[i] != expectedPrefix[i]) {
-            std::cerr << "[FAIL] " << caseName << ": got " << uds::bytesToHex(udsResp)
-                      << " expected prefix " << uds::bytesToHex(expectedPrefix) << "\n";
-            return false;
-        }
-    }
+    if (udsResp.size() < expectedPrefix.size()) return false;
+    for (size_t i = 0; i < expectedPrefix.size(); ++i) if (udsResp[i] != expectedPrefix[i]) return false;
     std::cout << "[PASS] " << caseName << " => " << uds::bytesToHex(udsResp) << "\n";
+    return true;
+}
+
+bool waitForAliveCheckAndRespond(int fd, const std::string& caseName) {
+    doip::Frame frame;
+    if (!recvDoipFrame(fd, frame)) return false;
+    if (frame.header.payloadType != static_cast<uint16_t>(doip::PayloadType::AliveCheckRequest)) return false;
+
+    std::vector<uint8_t> aliveResp{static_cast<uint8_t>((config::kTesterAddress >> 8) & 0xFF), static_cast<uint8_t>(config::kTesterAddress & 0xFF)};
+    if (!sendDoipFrame(fd, static_cast<uint16_t>(doip::PayloadType::AliveCheckResponse), aliveResp)) return false;
+    std::cout << "[PASS] " << caseName << " => alive check request/response ok\n";
     return true;
 }
 
@@ -92,10 +87,7 @@ int main() {
     raReq[2] = 0x00;
     if (!sendDoipFrame(fd, static_cast<uint16_t>(doip::PayloadType::RoutingActivationRequest), raReq)) return 1;
     doip::Frame raResp;
-    if (!recvDoipFrame(fd, raResp) || raResp.payload.size() < 5 || raResp.payload[4] != 0x10) {
-        std::cerr << "RA failed\n";
-        return 2;
-    }
+    if (!recvDoipFrame(fd, raResp) || raResp.payload.size() < 5 || raResp.payload[4] != 0x10) return 2;
 
     bool ok = true;
     ok &= sendUdsAndExpect(fd, {0x10, 0x03}, {0x50, 0x03}, "session 10 03");
@@ -117,6 +109,9 @@ int main() {
     ok &= sendUdsAndExpect(fd, {0x36, 0x01, 0x11, 0x22}, {0x76, 0x01}, "file transfer block1");
     ok &= sendUdsAndExpect(fd, {0x36, 0x02, 0x33, 0x44}, {0x76, 0x02}, "file transfer block2");
     ok &= sendUdsAndExpect(fd, {0x37}, {0x77}, "file transfer exit");
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5500));
+    ok &= waitForAliveCheckAndRespond(fd, "doip inactivity triggers alive check");
 
     close(fd);
     if (!ok) return 3;

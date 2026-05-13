@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <string>
+#include <cstdint>
 #include "../uds/uds_types.hpp"
 
 namespace dcm {
@@ -13,6 +14,7 @@ namespace dcm {
 class DcmCore {
 public:
     uds::Message process(const uds::Message& request);
+    void tick(uint64_t nowMs);
 
 private:
     static uds::Message negativeResponse(uint8_t sid, uint8_t nrc);
@@ -35,6 +37,9 @@ private:
     bool fileReplaceMode_{false};
     std::string targetFilePath_{};
     std::ofstream transferFile_{};
+    uint64_t lastActivityMs_{0};
+    uint64_t securityUnlockMs_{0};
+    uint64_t transferStartMs_{0};
 };
 
 }  // namespace dcm

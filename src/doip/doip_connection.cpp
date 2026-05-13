@@ -7,9 +7,16 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <unistd.h>
+#include <poll.h>
+#include <chrono>
 
 namespace doip {
 namespace {
+static uint64_t monotonicMs() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 constexpr uint8_t kRaOk = 0x10;
 constexpr uint8_t kRaDeniedUnknownSourceAddress = 0x00;
 constexpr uint8_t kRaDeniedUnsupportedActivationType = 0x06;
@@ -104,9 +111,32 @@ bool DoipConnection::handleAliveCheck(const Frame& frame) {
 }
 
 bool DoipConnection::run() {
+    uint64_t lastRxMs = monotonicMs();
+    uint64_t aliveSentMs = 0;
+    bool awaitingAliveResp = false;
     while (state_ != DoipConnectionState::Closing) {
+        const uint64_t now = monotonicMs();
+        udsServer_.tick(now);
+
+        if (state_ == DoipConnectionState::RoutingActivated && now > lastRxMs + static_cast<uint64_t>(config::kDoipRxInactivityTimeoutMs) && !awaitingAliveResp) {
+            std::vector<uint8_t> aliveReq{static_cast<uint8_t>((testerAddress_ >> 8) & 0xFF), static_cast<uint8_t>(testerAddress_ & 0xFF)};
+            sendFrame(static_cast<uint16_t>(PayloadType::AliveCheckRequest), aliveReq);
+            awaitingAliveResp = true;
+            aliveSentMs = now;
+            LOG_WARN("DOIP", "Inactivity timeout reached, sent AliveCheckRequest");
+        }
+        if (awaitingAliveResp && now > aliveSentMs + static_cast<uint64_t>(config::kDoipAliveCheckResponseTimeoutMs)) {
+            LOG_ERROR("DOIP", "AliveCheckResponse timeout, closing connection");
+            break;
+        }
+
+        pollfd pfd{socketFd_, POLLIN, 0};
+        const int pr = poll(&pfd, 1, config::kDoipPollMs);
+        if (pr <= 0) continue;
+
         Frame frame;
         if (!readOneFrame(frame)) break;
+        lastRxMs = monotonicMs();
         const uint16_t pt = frame.header.payloadType;
         bool ok = true;
         if (pt == static_cast<uint16_t>(PayloadType::RoutingActivationRequest)) {
@@ -115,6 +145,7 @@ bool DoipConnection::run() {
             ok = handleDiagnosticMessage(frame);
         } else if (pt == static_cast<uint16_t>(PayloadType::AliveCheckRequest) ||
                    pt == static_cast<uint16_t>(PayloadType::AliveCheckResponse)) {
+            if (pt == static_cast<uint16_t>(PayloadType::AliveCheckResponse)) awaitingAliveResp = false;
             ok = handleAliveCheck(frame);
         }
         if (!ok) break;

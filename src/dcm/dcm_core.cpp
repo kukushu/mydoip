@@ -5,9 +5,15 @@
 #include "../common/log/logger.hpp"
 
 #include <filesystem>
+#include <chrono>
 
 namespace dcm {
 namespace {
+static uint64_t nowMs() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 constexpr uint16_t kDidWritableExample = 0xF191;
 constexpr uint16_t kSecuritySeedLevel1 = 0x1234;
 constexpr uint16_t kSecuritySeedLevel2 = 0x5678;
@@ -40,6 +46,7 @@ uds::Message DcmCore::handleSecurityAccess(const uds::Message& request) {
         const uint16_t key = static_cast<uint16_t>(request[2] << 8 | request[3]);
         if (key != kSecurityKeyLevel1) return negativeResponse(uds::kSidSecurityAccess, uds::kNrcInvalidKey);
         context_.currentSecurityLevel = 1;
+        securityUnlockMs_ = nowMs();
         LOG_INFO("DCM", "Security level unlocked: 1");
         return {0x67, sub};
     }
@@ -49,6 +56,7 @@ uds::Message DcmCore::handleSecurityAccess(const uds::Message& request) {
         const uint16_t key = static_cast<uint16_t>(request[2] << 8 | request[3]);
         if (key != kSecurityKeyLevel2) return negativeResponse(uds::kSidSecurityAccess, uds::kNrcInvalidKey);
         context_.currentSecurityLevel = 2;
+        securityUnlockMs_ = nowMs();
         LOG_INFO("DCM", "Security level unlocked: 2");
         return {0x67, sub};
     }
@@ -156,11 +164,13 @@ uds::Message DcmCore::handleRequestFileTransfer(const uds::Message& request) {
     }
 
     transferActive_ = true;
+    transferStartMs_ = nowMs();
     return {0x78, modeOfOperation, 0x20, 0x00};
 }
 
 uds::Message DcmCore::process(const uds::Message& request) {
     if (request.empty()) return negativeResponse(0x00, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
+    lastActivityMs_ = nowMs();
     switch (request[0]) {
         case uds::kSidDiagnosticSessionControl: return handleSessionControl(request);
         case uds::kSidSecurityAccess: return handleSecurityAccess(request);
@@ -171,6 +181,26 @@ uds::Message DcmCore::process(const uds::Message& request) {
         case uds::kSidRequestTransferExit: return handleRequestTransferExit(request);
         case uds::kSidRequestFileTransfer: return handleRequestFileTransfer(request);
         default: return negativeResponse(request[0], uds::kNrcServiceNotSupported);
+    }
+}
+
+
+
+void DcmCore::tick(uint64_t now) {
+    if (context_.currentSecurityLevel > 0 && securityUnlockMs_ > 0 &&
+        now > securityUnlockMs_ + static_cast<uint64_t>(config::kDcmSecurityTimeoutMs)) {
+        LOG_WARN("DCM", "Security level timeout, reset to 0");
+        context_.currentSecurityLevel = 0;
+        securityUnlockMs_ = 0;
+    }
+    if (transferActive_ && transferStartMs_ > 0 &&
+        now > transferStartMs_ + static_cast<uint64_t>(config::kDcmTransferTimeoutMs)) {
+        LOG_WARN("DCM", "Transfer timeout, aborting transfer");
+        if (transferFile_.is_open()) transferFile_.close();
+        transferActive_ = false;
+        fileReplaceMode_ = false;
+        expectedBlockCounter_ = 1;
+        transferStartMs_ = 0;
     }
 }
 

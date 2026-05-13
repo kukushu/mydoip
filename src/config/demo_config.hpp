@@ -39,4 +39,11 @@ constexpr bool kRequireSecurityDefaultForRoutine = true;
 constexpr uint8_t kRequiredSessionForRoutineFF00 = 0x03;
 constexpr bool kRequireSecurityForRoutineFF00 = true;
 
+// Timeout settings
+constexpr int kDoipPollMs = 200;
+constexpr int kDoipRxInactivityTimeoutMs = 5000;
+constexpr int kDoipAliveCheckResponseTimeoutMs = 1500;
+constexpr int kDcmSecurityTimeoutMs = 10000;
+constexpr int kDcmTransferTimeoutMs = 15000;
+
 }  // namespace config
