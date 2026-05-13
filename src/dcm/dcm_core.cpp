@@ -2,6 +2,7 @@
 
 #include "../config/demo_config.hpp"
 #include "../uds/protocol.hpp"
+#include "../common/log/logger.hpp"
 
 #include <filesystem>
 
@@ -25,6 +26,7 @@ bool DcmCore::isRuleAllowed(const AccessRule& rule) const {
 uds::Message DcmCore::handleSessionControl(const uds::Message& request) {
     if (request.size() < 2) return negativeResponse(uds::kSidDiagnosticSessionControl, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
     context_.currentSession = request[1];
+    LOG_INFO("DCM", "Session switched to 0x" + std::to_string(request[1]));
     context_.currentSecurityLevel = 0;
     return {0x50, request[1], 0x00, 0x32, 0x01, 0xF4};
 }
@@ -38,6 +40,7 @@ uds::Message DcmCore::handleSecurityAccess(const uds::Message& request) {
         const uint16_t key = static_cast<uint16_t>(request[2] << 8 | request[3]);
         if (key != kSecurityKeyLevel1) return negativeResponse(uds::kSidSecurityAccess, uds::kNrcInvalidKey);
         context_.currentSecurityLevel = 1;
+        LOG_INFO("DCM", "Security level unlocked: 1");
         return {0x67, sub};
     }
     if (sub == 0x03) return {0x67, sub, static_cast<uint8_t>(kSecuritySeedLevel2 >> 8), static_cast<uint8_t>(kSecuritySeedLevel2)};
@@ -46,6 +49,7 @@ uds::Message DcmCore::handleSecurityAccess(const uds::Message& request) {
         const uint16_t key = static_cast<uint16_t>(request[2] << 8 | request[3]);
         if (key != kSecurityKeyLevel2) return negativeResponse(uds::kSidSecurityAccess, uds::kNrcInvalidKey);
         context_.currentSecurityLevel = 2;
+        LOG_INFO("DCM", "Security level unlocked: 2");
         return {0x67, sub};
     }
     return negativeResponse(uds::kSidSecurityAccess, uds::kNrcSubFunctionNotSupported);
@@ -99,6 +103,7 @@ uds::Message DcmCore::handleTransferData(const uds::Message& request) {
     if (fileReplaceMode_) {
         if (!transferFile_.is_open()) return negativeResponse(uds::kSidTransferData, uds::kNrcGeneralReject);
         transferFile_.write(reinterpret_cast<const char*>(request.data() + 2), static_cast<std::streamsize>(request.size() - 2));
+        LOG_DEBUG("DCM", "Write transfer block=" + std::to_string(blockCounter) + " bytes=" + std::to_string(request.size() - 2));
         if (!transferFile_) return negativeResponse(uds::kSidTransferData, uds::kNrcGeneralReject);
     }
 
@@ -143,6 +148,7 @@ uds::Message DcmCore::handleRequestFileTransfer(const uds::Message& request) {
         targetFilePath_ = std::string("/tmp/doip_files/") + fileName;
 
         transferFile_.open(targetFilePath_, std::ios::binary | std::ios::trunc);
+        LOG_INFO("DCM", "Open transfer target: " + targetFilePath_);
         if (!transferFile_.is_open()) {
             return negativeResponse(uds::kSidRequestFileTransfer, uds::kNrcGeneralReject);
         }

@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(dcm STATIC
+    src/common/log/logger.cpp
     src/dcm/dcm_service.cpp
     src/dcm/dcm_core.cpp
     src/dcm/access_policy.cpp

@@ -2,6 +2,7 @@
 
 #include "../config/demo_config.hpp"
 #include "socket_io.hpp"
+#include "../common/log/logger.hpp"
 
 #include <arpa/inet.h>
 #include <cstring>
@@ -66,12 +67,14 @@ bool DoipConnection::handleRoutingActivation(const Frame& frame) {
     if (code == kRaOk) {
         testerAddress_ = sa;
         state_ = DoipConnectionState::RoutingActivated;
+        LOG_INFO("DOIP", "Routing activated for tester: 0x" + std::to_string(sa));
     }
     return sendFrame(static_cast<uint16_t>(PayloadType::RoutingActivationResponse), resp);
 }
 
 bool DoipConnection::handleDiagnosticMessage(const Frame& frame) {
     if (state_ != DoipConnectionState::RoutingActivated) {
+        LOG_WARN("DOIP", "Diagnostic message before routing activation");
         std::vector<uint8_t> nack = {kRaDeniedRoutingNotActive};
         return sendFrame(static_cast<uint16_t>(PayloadType::AliveCheckResponse), nack);
     }
@@ -116,6 +119,7 @@ bool DoipConnection::run() {
         }
         if (!ok) break;
     }
+    LOG_INFO("DOIP", "Connection closing");
     close(socketFd_);
     state_ = DoipConnectionState::Disconnected;
     return true;

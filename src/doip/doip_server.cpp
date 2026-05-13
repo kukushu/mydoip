@@ -2,6 +2,7 @@
 
 #include "../config/demo_config.hpp"
 #include "doip_connection.hpp"
+#include "../common/log/logger.hpp"
 
 #include <arpa/inet.h>
 #include <iostream>
@@ -27,12 +28,13 @@ int DoipServer::run() {
     if (bind(serverFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) return 1;
     if (listen(serverFd, 1) < 0) return 1;
 
-    std::cout << "DoIP server listening on 0.0.0.0:" << config::kDoipPort << "\n";
+    LOG_INFO("DOIP", "Server listening on 0.0.0.0:" + std::to_string(config::kDoipPort));
     while (true) {
         sockaddr_in clientAddr{};
         socklen_t len = sizeof(clientAddr);
         int clientFd = accept(serverFd, reinterpret_cast<sockaddr*>(&clientAddr), &len);
-        if (clientFd < 0) continue;
+        if (clientFd < 0) { LOG_WARN("DOIP", "accept failed"); continue; }
+        LOG_INFO("DOIP", "Client connected");
         DoipConnection conn(clientFd, udsServer_);
         conn.run();
     }
