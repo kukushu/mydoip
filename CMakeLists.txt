@@ -4,7 +4,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_library(dcm STATIC src/dcm/dcm_service.cpp)
+add_library(dcm STATIC
+    src/dcm/dcm_service.cpp
+    src/dcm/dcm_core.cpp
+    src/dcm/access_policy.cpp
+    src/dcm/store/ram_did_store.cpp)
 target_include_directories(dcm PUBLIC src)
 add_library(doip STATIC src/doip/doip_frame.cpp src/doip/doip_connection.cpp src/doip/doip_server.cpp)
 target_include_directories(doip PUBLIC src)
@@ -13,3 +17,6 @@ add_executable(doip_server src/app/server.cpp)
 target_link_libraries(doip_server PRIVATE doip dcm)
 add_executable(doip_client src/app/client.cpp)
 target_link_libraries(doip_client PRIVATE doip dcm)
+
+add_executable(doip_test_client src/app/test_client.cpp)
+target_link_libraries(doip_test_client PRIVATE doip dcm)
