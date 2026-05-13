@@ -17,3 +17,6 @@ add_executable(doip_server src/app/server.cpp)
 target_link_libraries(doip_server PRIVATE doip dcm)
 add_executable(doip_client src/app/client.cpp)
 target_link_libraries(doip_client PRIVATE doip dcm)
+
+add_executable(doip_test_client src/app/test_client.cpp)
+target_link_libraries(doip_test_client PRIVATE doip dcm)
