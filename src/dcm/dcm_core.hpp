@@ -20,10 +20,15 @@ private:
     uds::Message handleReadDid(const uds::Message& request);
     uds::Message handleWriteDid(const uds::Message& request);
     uds::Message handleRoutineControl(const uds::Message& request);
+    uds::Message handleTransferData(const uds::Message& request);
+    uds::Message handleRequestTransferExit(const uds::Message& request);
+    uds::Message handleRequestFileTransfer(const uds::Message& request);
 
     DcmContext context_{};
     AccessPolicy policy_{};
     RamDidStore didStore_{};
+    bool transferActive_{false};
+    uint8_t expectedBlockCounter_{1};
 };
 
 }  // namespace dcm

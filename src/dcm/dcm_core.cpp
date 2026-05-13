@@ -86,6 +86,35 @@ uds::Message DcmCore::handleRoutineControl(const uds::Message& request) {
     return resp;
 }
 
+
+uds::Message DcmCore::handleTransferData(const uds::Message& request) {
+    if (!isRuleAllowed({0x03, 2})) return negativeResponse(uds::kSidTransferData, uds::kNrcSecurityAccessDenied);
+    if (!transferActive_) return negativeResponse(uds::kSidTransferData, uds::kNrcRequestOutOfRange);
+    if (request.size() < 2) return negativeResponse(uds::kSidTransferData, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
+    const uint8_t blockCounter = request[1];
+    if (blockCounter != expectedBlockCounter_) return negativeResponse(uds::kSidTransferData, 0x73);
+    expectedBlockCounter_++;
+    return {0x76, blockCounter};
+}
+
+uds::Message DcmCore::handleRequestTransferExit(const uds::Message& request) {
+    (void)request;
+    if (!isRuleAllowed({0x03, 2})) return negativeResponse(uds::kSidRequestTransferExit, uds::kNrcSecurityAccessDenied);
+    if (!transferActive_) return negativeResponse(uds::kSidRequestTransferExit, uds::kNrcRequestOutOfRange);
+    transferActive_ = false;
+    expectedBlockCounter_ = 1;
+    return {0x77};
+}
+
+uds::Message DcmCore::handleRequestFileTransfer(const uds::Message& request) {
+    if (!isRuleAllowed({0x03, 2})) return negativeResponse(uds::kSidRequestFileTransfer, uds::kNrcSecurityAccessDenied);
+    if (request.size() < 3) return negativeResponse(uds::kSidRequestFileTransfer, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
+    const uint8_t modeOfOperation = request[1];
+    transferActive_ = true;
+    expectedBlockCounter_ = 1;
+    return {0x78, modeOfOperation, 0x20, 0x00};
+}
+
 uds::Message DcmCore::process(const uds::Message& request) {
     if (request.empty()) return negativeResponse(0x00, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
     switch (request[0]) {
@@ -94,6 +123,9 @@ uds::Message DcmCore::process(const uds::Message& request) {
         case uds::kSidReadDataByIdentifier: return handleReadDid(request);
         case uds::kSidWriteDataByIdentifier: return handleWriteDid(request);
         case uds::kSidRoutineControl: return handleRoutineControl(request);
+        case uds::kSidTransferData: return handleTransferData(request);
+        case uds::kSidRequestTransferExit: return handleRequestTransferExit(request);
+        case uds::kSidRequestFileTransfer: return handleRequestFileTransfer(request);
         default: return negativeResponse(request[0], uds::kNrcServiceNotSupported);
     }
 }
