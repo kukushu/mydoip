@@ -3,6 +3,8 @@
 #include "../config/demo_config.hpp"
 #include "../uds/protocol.hpp"
 
+#include <filesystem>
+
 namespace dcm {
 namespace {
 constexpr uint16_t kDidWritableExample = 0xF191;
@@ -93,6 +95,13 @@ uds::Message DcmCore::handleTransferData(const uds::Message& request) {
     if (request.size() < 2) return negativeResponse(uds::kSidTransferData, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
     const uint8_t blockCounter = request[1];
     if (blockCounter != expectedBlockCounter_) return negativeResponse(uds::kSidTransferData, 0x73);
+
+    if (fileReplaceMode_) {
+        if (!transferFile_.is_open()) return negativeResponse(uds::kSidTransferData, uds::kNrcGeneralReject);
+        transferFile_.write(reinterpret_cast<const char*>(request.data() + 2), static_cast<std::streamsize>(request.size() - 2));
+        if (!transferFile_) return negativeResponse(uds::kSidTransferData, uds::kNrcGeneralReject);
+    }
+
     expectedBlockCounter_++;
     return {0x76, blockCounter};
 }
@@ -101,8 +110,15 @@ uds::Message DcmCore::handleRequestTransferExit(const uds::Message& request) {
     (void)request;
     if (!isRuleAllowed({0x03, 2})) return negativeResponse(uds::kSidRequestTransferExit, uds::kNrcSecurityAccessDenied);
     if (!transferActive_) return negativeResponse(uds::kSidRequestTransferExit, uds::kNrcRequestOutOfRange);
+
+    if (fileReplaceMode_ && transferFile_.is_open()) {
+        transferFile_.flush();
+        transferFile_.close();
+    }
+
     transferActive_ = false;
     expectedBlockCounter_ = 1;
+    fileReplaceMode_ = false;
     return {0x77};
 }
 
@@ -110,8 +126,30 @@ uds::Message DcmCore::handleRequestFileTransfer(const uds::Message& request) {
     if (!isRuleAllowed({0x03, 2})) return negativeResponse(uds::kSidRequestFileTransfer, uds::kNrcSecurityAccessDenied);
     if (request.size() < 3) return negativeResponse(uds::kSidRequestFileTransfer, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
     const uint8_t modeOfOperation = request[1];
-    transferActive_ = true;
+
+    transferActive_ = false;
     expectedBlockCounter_ = 1;
+    fileReplaceMode_ = false;
+    targetFilePath_.clear();
+    if (transferFile_.is_open()) transferFile_.close();
+
+    if (modeOfOperation == 0x03) {
+        const uint8_t fileNameLen = request[2];
+        if (request.size() < static_cast<size_t>(3 + fileNameLen) || fileNameLen == 0) {
+            return negativeResponse(uds::kSidRequestFileTransfer, uds::kNrcIncorrectMessageLengthOrInvalidFormat);
+        }
+        std::string fileName(request.begin() + 3, request.begin() + 3 + fileNameLen);
+        std::filesystem::create_directories("/tmp/doip_files");
+        targetFilePath_ = std::string("/tmp/doip_files/") + fileName;
+
+        transferFile_.open(targetFilePath_, std::ios::binary | std::ios::trunc);
+        if (!transferFile_.is_open()) {
+            return negativeResponse(uds::kSidRequestFileTransfer, uds::kNrcGeneralReject);
+        }
+        fileReplaceMode_ = true;
+    }
+
+    transferActive_ = true;
     return {0x78, modeOfOperation, 0x20, 0x00};
 }
 

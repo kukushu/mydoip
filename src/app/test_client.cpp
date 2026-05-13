@@ -113,6 +113,10 @@ int main() {
     ok &= sendUdsAndExpect(fd, {0x36, 0x01, 0xAA}, {0x76, 0x01}, "transfer data block1");
     ok &= sendUdsAndExpect(fd, {0x36, 0x02, 0xBB}, {0x76, 0x02}, "transfer data block2");
     ok &= sendUdsAndExpect(fd, {0x37}, {0x77}, "request transfer exit");
+    ok &= sendUdsAndExpect(fd, {0x38, 0x03, 0x08, 't','e','s','t','.','b','i','n'}, {0x78, 0x03}, "request file replace transfer");
+    ok &= sendUdsAndExpect(fd, {0x36, 0x01, 0x11, 0x22}, {0x76, 0x01}, "file transfer block1");
+    ok &= sendUdsAndExpect(fd, {0x36, 0x02, 0x33, 0x44}, {0x76, 0x02}, "file transfer block2");
+    ok &= sendUdsAndExpect(fd, {0x37}, {0x77}, "file transfer exit");
 
     close(fd);
     if (!ok) return 3;

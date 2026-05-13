@@ -3,6 +3,9 @@
 #include "access_policy.hpp"
 #include "dcm_context.hpp"
 #include "store/ram_did_store.hpp"
+
+#include <fstream>
+#include <string>
 #include "../uds/uds_types.hpp"
 
 namespace dcm {
@@ -29,6 +32,9 @@ private:
     RamDidStore didStore_{};
     bool transferActive_{false};
     uint8_t expectedBlockCounter_{1};
+    bool fileReplaceMode_{false};
+    std::string targetFilePath_{};
+    std::ofstream transferFile_{};
 };
 
 }  // namespace dcm
